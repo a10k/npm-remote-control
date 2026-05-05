@@ -5,12 +5,14 @@ import SwiftUI
 final class AppState: ObservableObject, @unchecked Sendable {
     @Published var project: PackageJSON?
     @Published var projectDirectory: URL?
+    @Published var loadError: String?
     @Published var states: [String: ScriptState] = [:]
     @Published var expanded: Set<String> = []
     // Mutated in place; callers send objectWillChange manually.
     @Published var outputs: [String: OutputBuffer] = [:]
 
     let runner = ScriptRunner()
+    private let fileWatcher = FileWatcher()
 
     // MARK: - Project loading
 
@@ -18,28 +20,38 @@ final class AppState: ObservableObject, @unchecked Sendable {
         guard let located = ProjectLocator.findPackageJSON() else {
             project = nil
             projectDirectory = nil
+            loadError = nil
             return
         }
         projectDirectory = located.directory
-        reload(from: located.file)
+        reloadFile(from: located.file)
+        fileWatcher.watch(located.file) { [weak self] in self?.softReload() }
     }
 
-    /// Re-read package.json and reset all script state.
+    /// Full reload triggered by the ↺ button: kills processes and resets UI state.
     func reload() {
         guard let dir = projectDirectory else { load(); return }
         Task { await runner.terminateAll() }
         states = [:]
         outputs = [:]
         expanded = []
-        reload(from: dir.appendingPathComponent("package.json"))
+        reloadFile(from: dir.appendingPathComponent("package.json"))
     }
 
-    private func reload(from url: URL) {
+    /// Soft reload triggered by the file watcher: updates the script list only.
+    private func softReload() {
+        guard let dir = projectDirectory else { return }
+        reloadFile(from: dir.appendingPathComponent("package.json"))
+    }
+
+    private func reloadFile(from url: URL) {
         do {
             let data = try Data(contentsOf: url)
             project = try PackageJSON.parse(from: data)
+            loadError = nil
         } catch {
             project = nil
+            loadError = error.localizedDescription
         }
     }
 
@@ -53,7 +65,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         let startTime = Date()
         outputs[name] = OutputBuffer()
         states[name] = .running(pid: -1, startedAt: startTime)
-        expanded.insert(name) // auto-open terminal panel
+        expanded.insert(name)
 
         Task { [weak self] in
             guard let self else { return }
@@ -68,7 +80,6 @@ final class AppState: ObservableObject, @unchecked Sendable {
                             guard let self else { return }
                             self.states[name] = .exited(code: code, at: Date())
                             if code == 0 {
-                                // Auto-collapse the panel after a clean exit.
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                                     self.expanded.remove(name)
                                 }
@@ -83,7 +94,8 @@ final class AppState: ObservableObject, @unchecked Sendable {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.outputs[name]?.append(
-                        "Error: could not start npm — is it in your PATH?\n\(error.localizedDescription)\n"
+                        "Error: could not start npm — check that npm is in your PATH.\n" +
+                        "\(error.localizedDescription)\n"
                     )
                     self.objectWillChange.send()
                     self.states[name] = .exited(code: 1, at: Date())
@@ -98,7 +110,6 @@ final class AppState: ObservableObject, @unchecked Sendable {
 
     private func appendOutput(_ chunk: String, for name: String) {
         guard let buffer = outputs[name] else { return }
-        // Normalise CR+LF and bare CR (progress bars) to LF before display.
         let normalized = chunk
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -114,14 +125,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     private var cancellables = Set<AnyCancellable>()
     private var fittingHeight: (() -> CGFloat)?
+    private var positionRestored = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
         appState.load()
 
         let win = BorderlessWindow()
-        let visualEffect = makeVisualEffectView()
+        win.delegate = self
 
+        let visualEffect = makeVisualEffectView()
         let hv = NSHostingView(rootView: ContentView().environmentObject(appState))
         hv.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.addSubview(hv)
@@ -135,17 +148,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fittingHeight = { hv.fittingSize.height }
         window = win
 
-        // Resize when scripts load/reload or terminal panels expand/collapse.
-        for pub in [appState.$project.map { _ in () }.eraseToAnyPublisher(),
-                    appState.$expanded.map { _ in () }.eraseToAnyPublisher()] {
-            pub.receive(on: DispatchQueue.main)
-               .sink { [weak self] in
-                   DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                       self?.sizeWindowToContent()
-                   }
-               }
-               .store(in: &cancellables)
-        }
+        // Resize on project change; restore saved position on the very first load.
+        appState.$project
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    guard let self else { return }
+                    self.sizeWindowToContent()
+                    if !self.positionRestored {
+                        self.positionRestored = true
+                        self.restoreWindowPosition()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        // Resize when terminal panels expand or collapse.
+        appState.$expanded
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self?.sizeWindowToContent()
+                }
+            }
+            .store(in: &cancellables)
 
         win.center()
         win.makeKeyAndOrderFront(nil)
@@ -153,12 +179,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Kill all child processes before the app exits.
         Task { await appState.runner.terminateAll() }
-        Thread.sleep(forTimeInterval: 0.3) // allow SIGTERM to propagate
+        Thread.sleep(forTimeInterval: 0.3)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // MARK: - Window position persistence
+
+    private var windowPositionKey: String? {
+        guard let dir = appState.projectDirectory else { return nil }
+        return "windowTopLeft:\(dir.appendingPathComponent("package.json").path)"
+    }
+
+    private func saveWindowPosition() {
+        guard let key = windowPositionKey, let win = window else { return }
+        // Persist the top-left corner so it stays put regardless of window height changes.
+        let topLeft = CGPoint(x: win.frame.origin.x,
+                              y: win.frame.origin.y + win.frame.height)
+        UserDefaults.standard.set(["x": Double(topLeft.x), "y": Double(topLeft.y)], forKey: key)
+    }
+
+    private func restoreWindowPosition() {
+        guard let key = windowPositionKey,
+              let dict = UserDefaults.standard.dictionary(forKey: key),
+              let x = dict["x"] as? Double,
+              let y = dict["y"] as? Double,
+              let win = window else { return }
+        // Re-anchor from the saved top-left corner (origin is bottom-left on macOS).
+        let origin = CGPoint(x: CGFloat(x), y: CGFloat(y) - win.frame.height)
+        // Clamp to visible screen area.
+        if let screen = win.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            let cx = min(max(origin.x, visible.minX), visible.maxX - win.frame.width)
+            let cy = min(max(origin.y, visible.minY), visible.maxY - win.frame.height)
+            win.setFrameOrigin(CGPoint(x: cx, y: cy))
+        } else {
+            win.setFrameOrigin(origin)
+        }
+    }
+
+    // MARK: - Helpers
 
     private func setupMenu() {
         let menu = NSMenu()
@@ -189,9 +250,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let win = window, let fh = fittingHeight else { return }
         let h = min(max(fh(), 80), 600)
         var f = win.frame
-        f.origin.y += f.height - h
+        f.origin.y += f.height - h // keep the top edge fixed
         f.size.height = h
         win.setFrame(f, display: true)
         win.invalidateShadow()
     }
+}
+
+// MARK: - NSWindowDelegate
+
+extension AppDelegate: NSWindowDelegate {
+    func windowDidMove(_ notification: Notification) { saveWindowPosition() }
+    func windowDidEndLiveResize(_ notification: Notification) { saveWindowPosition() }
 }

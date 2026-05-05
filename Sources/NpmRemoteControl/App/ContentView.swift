@@ -8,13 +8,17 @@ struct ContentView: View {
             HeaderView()
             Divider()
             mainContent
+            Divider()
+            footer
         }
         .frame(width: 280)
     }
 
     @ViewBuilder
     private var mainContent: some View {
-        if let project = state.project {
+        if let error = state.loadError {
+            statusText("Invalid package.json\n\(error)")
+        } else if let project = state.project {
             if project.scripts.isEmpty {
                 statusText("No scripts defined in package.json.")
             } else {
@@ -34,7 +38,7 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(maxHeight: 556)
+        .frame(maxHeight: 520)
     }
 
     private func statusText(_ message: String) -> some View {
@@ -44,5 +48,15 @@ struct ContentView: View {
             .multilineTextAlignment(.center)
             .padding(20)
             .frame(maxWidth: .infinity)
+    }
+
+    private var footer: some View {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                        as? String ?? "0.1"
+        return Text("npm remote control · v\(version)")
+            .font(.system(size: 10))
+            .foregroundColor(.secondary)
+            .opacity(0.5)
+            .padding(.vertical, 7)
     }
 }
