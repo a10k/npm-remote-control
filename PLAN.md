@@ -1,101 +1,69 @@
 # Implementation plan
 
-This is the plan Claude Code should follow. Work top-down. Commit after each milestone.
+Work top-down. Commit after each milestone.
 
-## Milestone 0 — Project skeleton
+## ✅ Milestone 0 — Project skeleton
 
-- Create a Swift Package Manager executable target named `NpmRemoteControl`.
-- Use `swift-tools-version:5.9` minimum.
-- Set up `Package.swift` with macOS 13+ as the deployment target (SwiftUI features used freely).
-- Add a `.gitignore` for Swift / Xcode (`.build/`, `*.xcodeproj/`, `DerivedData/`, `.DS_Store`). Already committed.
-- Add a `Makefile` (or `build.sh`) with these targets:
-  - `build` — `swift build -c release`
-  - `app` — wraps the binary into a `.app` bundle (see Bundle section below)
-  - `clean`
-- Verify `swift build` succeeds with a stub `main.swift` that just prints "hello".
+- Swift Package Manager executable target `NpmRemoteControl`, swift-tools-version 5.9, macOS 13+.
+- `Makefile` with `build`, `app`, `dmg`, `clean` targets.
+- `Scripts/build-app.sh` wraps the release binary into a `.app` bundle.
 
-## Milestone 1 — package.json discovery + parsing
+## ✅ Milestone 1 — package.json discovery + parsing
 
-- On launch, find `package.json` using this resolution order:
-  1. `Bundle.main.bundleURL.deletingLastPathComponent()` — the directory containing the `.app`. **This is the primary case.**
-  2. `FileManager.default.currentDirectoryPath` — for CLI / dev usage via `swift run`.
-  3. If neither has a `package.json`, show an empty state: "No package.json found next to this app. Drop the app into an npm project folder."
-- Parse the JSON with `JSONDecoder` into a struct that has `name`, `scripts: [String: String]`.
-- Preserve script ordering as it appears in the file (use a custom decoder or read raw JSON to get insertion order — `JSONDecoder` into `[String:String]` does NOT preserve order; we need order).
+- `ProjectLocator` checks the `.app`'s parent directory first, falls back to CWD (`swift run`).
+- `PackageJSON.parse(from:)` uses `JSONSerialization` for values and re-walks raw UTF-8 bytes to recover key insertion order (dictionaries are unordered).
+- Empty-state message when no `package.json` is found.
 
-## Milestone 2 — UI: the button list
+## ✅ Milestone 2 — UI: the button list
 
-- Use SwiftUI. Single window, no title bar (`NSWindow.styleMask` = `[.borderless, .resizable]`), background blur (NSVisualEffectView), corner radius 12.
-- Width fixed at 280, height grows with content (max 600, scrollable beyond).
-- For each script, render a `ScriptRow` view:
-  - Left: script name (monospace, ~13pt).
-  - Right: small icon — play / spinner / stop depending on state.
-  - Tap target: whole row.
-- Show project name (from `package.json`) + a small refresh icon in the header.
-- Window is draggable from the header.
-- Click outside the window? Don't dismiss — this is a tool window, not a popover.
+- `BorderlessWindow`: `styleMask = [.borderless, .resizable]`, `level = .floating`, `NSVisualEffectView(.sidebar)` for behind-window blur, corner radius 12, draggable anywhere.
+- `ContentView` → `HeaderView` (project name + reload button) + scrollable `ScriptRow` list.
+- `ScriptRow` shows script name (monospace 13pt) and a play / spinner / checkmark / ✗ icon driven by `ScriptState`.
+- Window auto-sizes to content via `NSHostingView.fittingSize`, capped at 600 px.
 
-## Milestone 3 — Running scripts
+## ✅ Milestone 3 — Running scripts
 
-- Build a `ScriptRunner` actor that owns a process map: `[scriptName: Process]`.
-- `run(scriptName:)`:
-  - Resolve `npm` via `/usr/bin/env`. Use `Process` with `executableURL = /usr/bin/env`, args `["npm", "run", scriptName]`.
-  - Set `currentDirectoryURL` to the package.json folder.
-  - Set `environment` to inherit + ensure `PATH` includes `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`.
-  - Wire up a `Pipe` for stdout and stderr → write into a per-script `OutputBuffer`.
-  - On `terminationHandler`, post a notification with exit code; runner removes from process map.
-- `kill(scriptName:)`: send SIGTERM. After 3s, escalate to SIGKILL if still alive.
+- `ScriptRunner` actor owns `[String: Process]`.
+- Launches via `/usr/bin/env ["npm", "run", name]`; inherits env with `/usr/local/bin` and `/opt/homebrew/bin` prepended to PATH.
+- Streams stdout + stderr through `readabilityHandler` → `OutputBuffer` (5000-line / 256 KB ring buffer).
+- `terminate()` sends SIGTERM; escalates to SIGKILL via `Darwin.kill` after 3 s.
+- `AppState.run(script:)` sets state optimistically, gets real PID after launch.
 
-## Milestone 4 — Embedded terminal panel
+## ✅ Milestone 5 (partial) — Distribution
 
-- Tapping a script row that's running expands an inline terminal panel under the row.
-- Panel: monospace text view, dark background, ~200pt tall, scrollable, auto-scrolls to bottom.
-- Top-right of panel: a small Kill (×) button.
-- ANSI handling: strip ANSI escapes for v1 (don't try to colorize). Track this as a follow-up.
-- Buffer is capped (e.g., last 5000 lines or 256 KB) to keep memory bounded.
-- On clean exit (code 0): collapse the panel after 1.5s.
-- On non-zero exit: keep panel open, show exit code in red at the bottom.
+- `make app` → `build/release/npm-remote-control.app` with `Info.plist` and ad-hoc codesign.
+- `make dmg` → `build/release/npm-remote-control.dmg` (drag-to-install, `.app` + `/Applications` symlink).
 
-## Milestone 5 — Bundling as a .app
+## 🔜 Milestone 4 — Embedded terminal panel
 
-- After `swift build -c release`, package as an .app:
-  ```
-  AppName.app/
-    Contents/
-      Info.plist        (CFBundleIdentifier, LSUIElement=YES if we want a menubar-only app, etc.)
-      MacOS/
-        NpmRemoteControl   (the binary)
-      Resources/
-        AppIcon.icns
-  ```
-- `LSUIElement = YES` keeps it out of the Dock — but this is a regular app, so leave it NO for v1.
-- Set `CFBundleName = "npm remote control"`.
-- Codesign with ad-hoc signature (`codesign --force --deep --sign - AppName.app`) so it launches without Gatekeeper griping (user will still need to right-click → Open the first time on a fresh download).
-- Add a `make dmg` target that wraps the `.app` in a drag-to-install DMG:
-  - Staging folder with `npm-remote-control.app` + a symlink to `/Applications`.
-  - `hdiutil create` with `-format UDZO` (zlib-compressed) → `build/release/npm-remote-control.dmg`.
-  - Window is sized to show both icons side-by-side (no custom background needed for v1).
+- Tapping a running script row expands an inline terminal panel below the row.
+- Monospace text, dark background, ~200 pt tall, auto-scrolls, Kill (×) button top-right.
+- On exit 0: auto-collapse after 1.5 s. On non-zero: keep open, show exit code in red.
 
-## Milestone 6 — Polish
+## 🔜 Milestone 5 (remainder) — App icon
 
-- Persist window position per project (use the package.json's resolved path as a key in `UserDefaults`).
-- Handle package.json edits: `DispatchSource.makeFileSystemObjectSource` to watch the file; reload on change.
-- Empty-state and error states (malformed package.json, no scripts).
+- Add `AppIcon.icns` to `Resources/` and reference it in `Info.plist`.
+
+## 🔜 Milestone 6 — Polish
+
+- Persist window position per project (`UserDefaults`, keyed by resolved `package.json` path).
+- Watch `package.json` with `DispatchSource.makeFileSystemObjectSource`; reload on change.
+- Malformed JSON error state.
 - About / version footer.
 
-## Out of scope (for v1)
+## Out of scope (v1)
 
-- Workspaces / monorepos — only top-level `package.json`.
-- pnpm / yarn detection — npm only for v1.
-- ANSI color in embedded terminal.
+- Workspaces / monorepos.
+- pnpm / yarn support.
+- ANSI color in terminal.
 - Auto-updates.
-- Notarization / Apple Developer account signing.
+- Notarization / App Store signing.
 
-## Testing checklist
+## Manual test checklist
 
-- Drop `.app` next to a Vite project, click `dev` — server starts, terminal shows logs, Kill stops it.
-- Click `format` — quick task, terminal flashes briefly, auto-collapses on exit 0.
-- Click `test` (failing) — terminal stays open, exit code shown.
-- Click `dev` twice — second click is a no-op while running.
-- Move `.app` to a folder with no `package.json` — empty state.
-- Edit `package.json` to add a new script — UI updates within ~1s.
+- Drop `.app` next to a Vite project → click `dev`, server starts, spinner shows, Kill stops it.
+- Click `format` → spinner then green checkmark, terminal auto-collapses (M4).
+- Click `test` on a failing suite → terminal stays open with red exit code (M4).
+- Click `dev` twice → second click is a no-op.
+- Move `.app` to a folder with no `package.json` → empty-state message.
+- Edit `package.json`, click ↺ → new scripts appear instantly.
