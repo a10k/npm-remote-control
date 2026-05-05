@@ -2,11 +2,16 @@ import AppKit
 import Combine
 import SwiftUI
 
-final class AppState: ObservableObject {
+final class AppState: ObservableObject, @unchecked Sendable {
     @Published var project: PackageJSON?
     @Published var projectDirectory: URL?
     @Published var states: [String: ScriptState] = [:]
-    @Published var expanded: Set<String> = []
+    // outputs values are mutated in place; callers must trigger objectWillChange manually.
+    @Published var outputs: [String: OutputBuffer] = [:]
+
+    let runner = ScriptRunner()
+
+    // MARK: - Project loading
 
     func load() {
         guard let located = ProjectLocator.findPackageJSON() else {
@@ -31,13 +36,63 @@ final class AppState: ObservableObject {
             project = nil
         }
     }
+
+    // MARK: - Script lifecycle
+
+    func run(script: Script) {
+        guard let dir = projectDirectory else { return }
+        let name = script.id
+
+        // Ignore taps on already-running scripts.
+        if case .running = states[name] { return }
+
+        let startTime = Date()
+        outputs[name] = OutputBuffer()
+        states[name] = .running(pid: -1, startedAt: startTime)
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let pid = try await self.runner.run(
+                    name, in: dir,
+                    onOutput: { [weak self] chunk in
+                        DispatchQueue.main.async { self?.appendOutput(chunk, for: name) }
+                    },
+                    onExit: { [weak self] code in
+                        DispatchQueue.main.async {
+                            self?.states[name] = .exited(code: code, at: Date())
+                        }
+                    }
+                )
+                DispatchQueue.main.async { [weak self] in
+                    // Update with real PID now that the process is confirmed launched.
+                    self?.states[name] = .running(pid: pid, startedAt: startTime)
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.states[name] = .exited(code: 1, at: Date())
+                }
+            }
+        }
+    }
+
+    func stop(script: Script) {
+        Task { await runner.terminate(script.id) }
+    }
+
+    private func appendOutput(_ chunk: String, for name: String) {
+        guard let buffer = outputs[name] else { return }
+        objectWillChange.send()
+        buffer.append(ANSI.strip(chunk))
+    }
 }
+
+// MARK: - App delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: BorderlessWindow?
     let appState = AppState()
     private var cancellables = Set<AnyCancellable>()
-    // Captures the hosting view without naming its opaque generic parameter.
     private var fittingHeight: (() -> CGFloat)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -59,11 +114,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fittingHeight = { hv.fittingSize.height }
         window = win
 
-        // Resize whenever scripts load or change (e.g., refresh).
         appState.$project
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                // Defer one run loop so SwiftUI finishes its layout pass first.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     self?.sizeWindowToContent()
                 }

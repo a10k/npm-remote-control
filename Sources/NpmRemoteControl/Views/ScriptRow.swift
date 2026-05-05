@@ -22,7 +22,16 @@ struct ScriptRow: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { /* M3: run / stop */ }
+        .onTapGesture { handleTap() }
+    }
+
+    private func handleTap() {
+        switch scriptState {
+        case .idle, .exited:
+            state.run(script: script)
+        case .running:
+            break // no-op while running; Kill button arrives in M4
+        }
     }
 
     @ViewBuilder
