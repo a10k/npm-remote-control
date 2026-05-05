@@ -192,8 +192,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        Task { await appState.runner.terminateAll() }
-        Thread.sleep(forTimeInterval: 0.3)
+        let runner = appState.runner
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            await runner.terminateAll()
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 2)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
