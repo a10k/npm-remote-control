@@ -1,5 +1,11 @@
 import Foundation
 
+enum ScriptState: Equatable {
+    case idle
+    case running(pid: Int32, startedAt: Date)
+    case exited(code: Int32, at: Date)
+}
+
 struct Script: Identifiable, Hashable {
     let id: String      // script name (key in package.json)
     let command: String // raw command string
