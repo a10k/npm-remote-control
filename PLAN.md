@@ -71,6 +71,10 @@ This is the plan Claude Code should follow. Work top-down. Commit after each mil
 - `LSUIElement = YES` keeps it out of the Dock — but this is a regular app, so leave it NO for v1.
 - Set `CFBundleName = "npm remote control"`.
 - Codesign with ad-hoc signature (`codesign --force --deep --sign - AppName.app`) so it launches without Gatekeeper griping (user will still need to right-click → Open the first time on a fresh download).
+- Add a `make dmg` target that wraps the `.app` in a drag-to-install DMG:
+  - Staging folder with `npm-remote-control.app` + a symlink to `/Applications`.
+  - `hdiutil create` with `-format UDZO` (zlib-compressed) → `build/release/npm-remote-control.dmg`.
+  - Window is sized to show both icons side-by-side (no custom background needed for v1).
 
 ## Milestone 6 — Polish
 
