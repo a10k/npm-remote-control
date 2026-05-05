@@ -113,6 +113,13 @@ final class AppState: ObservableObject, @unchecked Sendable {
         }
     }
 
+    func reset(scriptNamed name: String) {
+        states[name] = .idle
+        outputs[name]?.clear()
+        objectWillChange.send()
+        expanded.remove(name)
+    }
+
     func stop(scriptNamed name: String) {
         userStopped.insert(name)
         outputs[name]?.clear()

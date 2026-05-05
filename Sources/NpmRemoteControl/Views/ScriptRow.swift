@@ -21,6 +21,7 @@ struct ScriptRow: View {
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { handleTap() }
+            .contextMenu { contextMenuItems }
 
             if state.expanded.contains(script.id) {
                 TerminalPanel(scriptName: script.id)
@@ -39,6 +40,22 @@ struct ScriptRow: View {
             } else {
                 state.expanded.insert(script.id)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        switch scriptState {
+        case .running:
+            Button(role: .destructive) { state.stop(scriptNamed: script.id) } label: {
+                Label("Kill", systemImage: "stop.fill")
+            }
+        case .exited:
+            Button { state.reset(scriptNamed: script.id) } label: {
+                Label("Reset", systemImage: "arrow.counterclockwise")
+            }
+        case .idle:
+            EmptyView()
         }
     }
 
