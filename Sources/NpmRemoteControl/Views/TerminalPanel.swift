@@ -39,7 +39,7 @@ struct TerminalPanel: View {
                     .textSelection(.enabled)
                 Color.clear.frame(height: 1).id("bottom")
             }
-            .onChange(of: output.count) { _ in
+            .onChange(of: output.count) {
                 proxy.scrollTo("bottom")
             }
         }

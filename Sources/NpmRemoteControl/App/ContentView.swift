@@ -12,6 +12,7 @@ struct ContentView: View {
             footer
         }
         .frame(width: 280)
+        .glassEffect(in: .rect(cornerRadius: 12))
     }
 
     @ViewBuilder

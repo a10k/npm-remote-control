@@ -14,8 +14,8 @@ actor ScriptRunner {
     func run(
         _ name: String,
         in dir: URL,
-        onOutput: @escaping (String) -> Void,
-        onExit: @escaping (Int32) -> Void
+        onOutput: @escaping @Sendable (String) -> Void,
+        onExit: @escaping @Sendable (Int32) -> Void
     ) throws -> Int32 {
         if let existing = entries[name], existing.process.isRunning { return -1 }
 

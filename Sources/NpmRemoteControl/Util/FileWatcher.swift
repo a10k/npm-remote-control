@@ -3,8 +3,9 @@ import Foundation
 /// Watches a single file for changes via DispatchSource.
 /// Re-establishes the watch on rename/delete so atomic saves
 /// (write-to-temp then rename, used by VS Code, vim, etc.) are caught.
+@MainActor
 final class FileWatcher {
-    private var source: DispatchSourceFileSystemObject?
+    nonisolated(unsafe) private var source: DispatchSourceFileSystemObject?
 
     func watch(_ url: URL, onChange: @escaping () -> Void) {
         stop()
@@ -43,5 +44,8 @@ final class FileWatcher {
         source = nil
     }
 
-    deinit { stop() }
+    deinit {
+        source?.cancel()
+        source = nil
+    }
 }

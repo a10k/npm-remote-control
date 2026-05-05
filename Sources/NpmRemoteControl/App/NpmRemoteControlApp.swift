@@ -2,7 +2,8 @@ import AppKit
 import Combine
 import SwiftUI
 
-final class AppState: ObservableObject, @unchecked Sendable {
+@MainActor
+final class AppState: ObservableObject {
     @Published var project: PackageJSON?
     @Published var projectDirectory: URL?
     @Published var loadError: String?
@@ -140,6 +141,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
 
 // MARK: - App delegate
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: BorderlessWindow?
     let appState = AppState()
@@ -154,17 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let win = BorderlessWindow()
         win.delegate = self
 
-        let visualEffect = makeVisualEffectView()
         let hv = NSHostingView(rootView: ContentView().environmentObject(appState))
-        hv.translatesAutoresizingMaskIntoConstraints = false
-        visualEffect.addSubview(hv)
-        NSLayoutConstraint.activate([
-            hv.topAnchor.constraint(equalTo: visualEffect.topAnchor),
-            hv.bottomAnchor.constraint(equalTo: visualEffect.bottomAnchor),
-            hv.leadingAnchor.constraint(equalTo: visualEffect.leadingAnchor),
-            hv.trailingAnchor.constraint(equalTo: visualEffect.trailingAnchor),
-        ])
-        win.contentView = visualEffect
+        win.contentView = hv
         fittingHeight = { hv.fittingSize.height }
         window = win
 
@@ -253,17 +246,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q"
         )
         NSApp.mainMenu = menu
-    }
-
-    private func makeVisualEffectView() -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .sidebar
-        v.blendingMode = .behindWindow
-        v.state = .active
-        v.wantsLayer = true
-        v.layer?.cornerRadius = 12
-        v.layer?.masksToBounds = true
-        return v
     }
 
     private func sizeWindowToContent() {
