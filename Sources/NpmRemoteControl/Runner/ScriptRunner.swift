@@ -5,8 +5,6 @@ actor ScriptRunner {
     private var processes: [String: Process] = [:]
 
     /// Launches `npm run <name>` in `dir`. Returns the PID, or -1 if already running.
-    /// Calls `onOutput` (background thread) with raw stdout/stderr chunks.
-    /// Calls `onExit` (background thread) with the termination status once done.
     func run(
         _ name: String,
         in dir: URL,
@@ -49,19 +47,34 @@ actor ScriptRunner {
         }
 
         try process.run()
+        let pid = process.processIdentifier
+        // Make the child a process-group leader so we can kill its whole tree.
+        setpgid(pid, pid)
         processes[name] = process
-        return process.processIdentifier
+        return pid
     }
 
-    /// Sends SIGTERM immediately; escalates to SIGKILL after 3 s if the process is still alive.
+    /// SIGTERM to the process group immediately; escalates to SIGKILL after 3 s.
     func terminate(_ name: String) async {
         guard let process = processes[name] else { return }
         let pid = process.processIdentifier
-        process.terminate()
+        Darwin.kill(-pid, SIGTERM) // whole process group
+        process.terminate()        // direct fallback if setpgid raced
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         if process.isRunning {
+            Darwin.kill(-pid, SIGKILL)
             Darwin.kill(pid, SIGKILL)
         }
+    }
+
+    /// Kill all running processes immediately — called on app quit.
+    func terminateAll() {
+        for (_, process) in processes where process.isRunning {
+            let pid = process.processIdentifier
+            Darwin.kill(-pid, SIGTERM)
+            process.terminate()
+        }
+        processes.removeAll()
     }
 
     private func remove(_ name: String) {
