@@ -11,6 +11,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
     // Mutated in place; callers send objectWillChange manually.
     @Published var outputs: [String: OutputBuffer] = [:]
 
+    private var userStopped: Set<String> = []
     let runner = ScriptRunner()
     private let fileWatcher = FileWatcher()
 
@@ -35,6 +36,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         states = [:]
         outputs = [:]
         expanded = []
+        userStopped = []
         reloadFile(from: dir.appendingPathComponent("package.json"))
     }
 
@@ -80,10 +82,15 @@ final class AppState: ObservableObject, @unchecked Sendable {
                             guard let self else { return }
                             // Ignore if the state was cleared by a reload.
                             guard case .running = self.states[name] else { return }
-                            self.states[name] = .exited(code: code, at: Date())
-                            if code == 0 {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    self.expanded.remove(name)
+                            if self.userStopped.remove(name) != nil {
+                                // User explicitly stopped — go back to idle with no badge.
+                                self.states[name] = .idle
+                            } else {
+                                self.states[name] = .exited(code: code, at: Date())
+                                if code == 0 {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                        self.expanded.remove(name)
+                                    }
                                 }
                             }
                         }
@@ -107,6 +114,10 @@ final class AppState: ObservableObject, @unchecked Sendable {
     }
 
     func stop(scriptNamed name: String) {
+        userStopped.insert(name)
+        outputs[name]?.clear()
+        objectWillChange.send()
+        expanded.remove(name)
         Task { await runner.terminate(name) }
     }
 
