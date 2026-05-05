@@ -78,6 +78,8 @@ final class AppState: ObservableObject, @unchecked Sendable {
                     onExit: { [weak self] code in
                         DispatchQueue.main.async { [weak self] in
                             guard let self else { return }
+                            // Ignore if the state was cleared by a reload.
+                            guard case .running = self.states[name] else { return }
                             self.states[name] = .exited(code: code, at: Date())
                             if code == 0 {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

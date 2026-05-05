@@ -2,7 +2,13 @@ import Darwin
 import Foundation
 
 actor ScriptRunner {
-    private var processes: [String: Process] = [:]
+    private struct Entry {
+        let process: Process
+        let outPipe: Pipe
+        let errPipe: Pipe
+    }
+
+    private var entries: [String: Entry] = [:]
 
     /// Launches `npm run <name>` in `dir`. Returns the PID, or -1 if already running.
     func run(
@@ -11,7 +17,7 @@ actor ScriptRunner {
         onOutput: @escaping (String) -> Void,
         onExit: @escaping (Int32) -> Void
     ) throws -> Int32 {
-        if let existing = processes[name], existing.isRunning { return -1 }
+        if let existing = entries[name], existing.process.isRunning { return -1 }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -50,13 +56,14 @@ actor ScriptRunner {
         let pid = process.processIdentifier
         // Make the child a process-group leader so we can kill its whole tree.
         setpgid(pid, pid)
-        processes[name] = process
+        entries[name] = Entry(process: process, outPipe: outPipe, errPipe: errPipe)
         return pid
     }
 
     /// SIGTERM to the process group immediately; escalates to SIGKILL after 3 s.
     func terminate(_ name: String) async {
-        guard let process = processes[name] else { return }
+        guard let entry = entries[name] else { return }
+        let process = entry.process
         let pid = process.processIdentifier
         Darwin.kill(-pid, SIGTERM) // whole process group
         process.terminate()        // direct fallback if setpgid raced
@@ -67,17 +74,19 @@ actor ScriptRunner {
         }
     }
 
-    /// Kill all running processes immediately — called on app quit.
+    /// Kill all running processes immediately — called on app quit and reload.
     func terminateAll() {
-        for (_, process) in processes where process.isRunning {
-            let pid = process.processIdentifier
+        for (_, entry) in entries where entry.process.isRunning {
+            let pid = entry.process.processIdentifier
+            entry.outPipe.fileHandleForReading.readabilityHandler = nil
+            entry.errPipe.fileHandleForReading.readabilityHandler = nil
             Darwin.kill(-pid, SIGTERM)
-            process.terminate()
+            entry.process.terminate()
         }
-        processes.removeAll()
+        entries.removeAll()
     }
 
     private func remove(_ name: String) {
-        processes.removeValue(forKey: name)
+        entries.removeValue(forKey: name)
     }
 }

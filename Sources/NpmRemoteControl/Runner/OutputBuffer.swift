@@ -16,9 +16,10 @@ final class OutputBuffer {
             lineCount -= 1
         }
 
-        // Hard byte cap: drop everything before the first newline past the midpoint.
+        // Hard byte cap: drop everything before the first newline past the byte midpoint.
         if text.utf8.count > maxBytes {
-            let mid = text.index(text.startIndex, offsetBy: text.count / 2)
+            let midByte = text.utf8.index(text.utf8.startIndex, offsetBy: text.utf8.count / 2)
+            let mid = midByte.samePosition(in: text) ?? text.startIndex
             if let nl = text[mid...].firstIndex(of: "\n") {
                 text.removeSubrange(text.startIndex...nl)
             } else {
