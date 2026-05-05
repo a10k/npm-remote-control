@@ -10,6 +10,13 @@ mkdir -p "$APP/Contents/Resources"
 
 cp "$BINARY" "$APP/Contents/MacOS/NpmRemoteControl"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+ICNS="$REPO_ROOT/Resources/AppIcon.icns"
+if [ -f "$ICNS" ]; then
+    cp "$ICNS" "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,6 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>
 EOF

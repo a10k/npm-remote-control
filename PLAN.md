@@ -34,17 +34,17 @@ Work top-down. Commit after each milestone.
 - `make app` → `build/release/npm-remote-control.app` with `Info.plist` and ad-hoc codesign.
 - `make dmg` → `build/release/npm-remote-control.dmg` (drag-to-install, `.app` + `/Applications` symlink).
 
-## 🔜 Milestone 4 — Embedded terminal panel
+## ✅ Milestone 4 — Embedded terminal panel
 
 - Tapping a running script row expands an inline terminal panel below the row.
 - Monospace text, dark background, ~200 pt tall, auto-scrolls, Kill (×) button top-right.
 - On exit 0: auto-collapse after 1.5 s. On non-zero: keep open, show exit code in red.
 
-## 🔜 Milestone 5 (remainder) — App icon
+## ✅ Milestone 5 (remainder) — App icon
 
 - Add `AppIcon.icns` to `Resources/` and reference it in `Info.plist`.
 
-## 🔜 Milestone 6 — Polish
+## ✅ Milestone 6 — Polish
 
 - Persist window position per project (`UserDefaults`, keyed by resolved `package.json` path).
 - Watch `package.json` with `DispatchSource.makeFileSystemObjectSource`; reload on change.
