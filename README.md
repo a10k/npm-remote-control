@@ -1,63 +1,43 @@
 # npm remote control
 
-a tiny macOS app that floats over your editor with one-click buttons for every npm script.
+A small macOS app that puts your npm scripts one click away, floating above your editor.
 
-**[⬇ Download DMG](https://github.com/a10k/npm-remote-control/releases/latest/download/npm-remote-control.dmg)** · macOS 26 · no install · no config
-
----
-
-## setup
-
-1. open the dmg, drag **npm remote control** to Applications
-2. drop the app into your project folder — right next to `package.json`
-3. that's it. it finds your scripts automatically.
+[Download](https://github.com/a10k/npm-remote-control/releases/latest/download/npm-remote-control.dmg) — macOS 26 or later, no installer.
 
 ---
 
-## what it does
+## Setup
 
-| action | result |
+1. Open the DMG and drag npm remote control to Applications.
+2. Place the app next to your project's `package.json` and open it.
+3. Your scripts appear automatically.
+
+---
+
+## Interactions
+
+| Action | Result |
 |---|---|
-| click a script | runs it, shows a spinner |
-| click again while running | toggles the live terminal output |
-| click × | kills the whole process tree, clears output |
-| right-click a failed script | **Reset** — clears the error badge |
-| edit `package.json` | panel updates live |
-| quit the app | everything it started dies with it |
+| Click a script | Runs it and opens the terminal panel |
+| Click a running script | Collapses or expands the terminal |
+| Click the stop button | Kills the process tree |
+| Right-click a running script | Kill |
+| Right-click a failed script | Reset — clears the error badge |
+| Edit `package.json` | The script list updates immediately |
+| Quit the app | All running processes are stopped |
+
+The window floats above other apps by default. Toggle this under the app menu.
 
 ---
 
-## releasing a new version
-
-push a version tag and GitHub Actions builds and attaches the DMG automatically:
-
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
-
-### no-gatekeeper setup (optional but recommended)
-
-without this, downloaded builds show a Gatekeeper warning on other people's macs. add these secrets to your GitHub repo → Settings → Secrets:
-
-| secret | what it is |
-|---|---|
-| `DEVELOPER_ID_CERT` | base64-encoded Developer ID `.p12` — `base64 -i cert.p12` |
-| `DEVELOPER_ID_CERT_PASSWORD` | password for the `.p12` |
-| `APPLE_ID` | your Apple ID email |
-| `APPLE_ID_PASSWORD` | an [app-specific password](https://support.apple.com/en-us/102654) |
-| `APPLE_TEAM_ID` | 10-char team ID from developer.apple.com |
-
-once set, every release is automatically signed, notarized, and stapled — opens on any mac without warnings.
-
----
-
-## build from source
+## Build from source
 
 ```bash
 git clone https://github.com/a10k/npm-remote-control
 cd npm-remote-control
-make dmg   # → build/release/npm-remote-control.dmg
+make build   # compiles the binary
+make app     # → build/release/npm-remote-control.app
+make dmg     # → build/release/npm-remote-control.dmg
 ```
 
-requires macOS 26 and Xcode 26.
-
+Requires macOS 26 and Xcode 26.
