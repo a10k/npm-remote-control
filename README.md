@@ -61,6 +61,3 @@ make dmg   # → build/release/npm-remote-control.dmg
 
 requires macOS 26 and Xcode 26.
 
----
-
-MIT
