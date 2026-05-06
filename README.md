@@ -4,7 +4,7 @@ A small macOS app that puts your npm scripts one click away, floating above your
 
 [Download](https://github.com/a10k/npm-remote-control/releases/latest/download/npm-remote-control.dmg) — macOS 26 or later, no installer.
 
-![npm remote control](screenshot.png)
+<img src="screenshot.png" width="200" alt="npm remote control" />
 
 ---
 
