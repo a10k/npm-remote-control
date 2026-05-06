@@ -8,8 +8,8 @@ A small macOS app that puts your npm scripts one click away, floating above your
 
 ## Setup
 
-1. Open the DMG and drag npm remote control to Applications.
-2. Place the app next to your project's `package.json` and open it.
+1. Open the DMG and drag npm remote control into your project folder, next to `package.json`.
+2. Open the app.
 3. Your scripts appear automatically.
 
 ---
