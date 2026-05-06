@@ -30,18 +30,6 @@ final class AppState: ObservableObject {
         fileWatcher.watch(located.file) { [weak self] in self?.softReload() }
     }
 
-    /// Full reload triggered by the ↺ button: kills processes and resets UI state.
-    func reload() {
-        guard let dir = projectDirectory else { load(); return }
-        Task { await runner.terminateAll() }
-        states = [:]
-        outputs = [:]
-        expanded = []
-        userStopped = []
-        reloadFile(from: dir.appendingPathComponent("package.json"))
-    }
-
-    /// Soft reload triggered by the file watcher: updates the script list only.
     private func softReload() {
         guard let dir = projectDirectory else { return }
         reloadFile(from: dir.appendingPathComponent("package.json"))
@@ -148,6 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var fittingHeight: (() -> CGFloat)?
     private var positionRestored = false
+    private var userHasManuallyResized = false
+    private var alwaysOnTopItem: NSMenuItem?
+    private static let alwaysOnTopKey = "alwaysOnTop"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
@@ -155,18 +146,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let win = BorderlessWindow()
         win.delegate = self
+        win.title = "npm remote control"
 
         let hv = NSHostingView(rootView: ContentView().environmentObject(appState))
         win.contentView = hv
         fittingHeight = { hv.fittingSize.height }
         window = win
+        applyAlwaysOnTop()
 
         // Resize on project change; restore saved position on the very first load.
         appState.$project
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] project in
+                self?.window?.title = project?.name ?? "npm remote control"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     guard let self else { return }
+                    // Reset manual-resize lock so the new project auto-sizes correctly.
+                    self.userHasManuallyResized = false
                     self.sizeWindowToContent()
                     if !self.positionRestored {
                         self.positionRestored = true
@@ -176,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Resize when terminal panels expand or collapse.
+        // Resize when terminal panels expand or collapse (unless user already resized manually).
         appState.$expanded
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -239,12 +235,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Helpers
 
+    private func applyAlwaysOnTop() {
+        let isOn = UserDefaults.standard.object(forKey: Self.alwaysOnTopKey) as? Bool ?? true
+        window?.level = isOn ? .floating : .normal
+        alwaysOnTopItem?.state = isOn ? .on : .off
+    }
+
+    @objc private func toggleAlwaysOnTop() {
+        let current = UserDefaults.standard.object(forKey: Self.alwaysOnTopKey) as? Bool ?? true
+        UserDefaults.standard.set(!current, forKey: Self.alwaysOnTopKey)
+        applyAlwaysOnTop()
+    }
+
     private func setupMenu() {
         let menu = NSMenu()
         let appItem = NSMenuItem()
         menu.addItem(appItem)
         let appMenu = NSMenu()
         appItem.submenu = appMenu
+        appMenu.addItem(
+            withTitle: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m"
+        )
+        appMenu.addItem(.separator())
+        let alwaysOnTop = NSMenuItem(
+            title: "Always on Top",
+            action: #selector(toggleAlwaysOnTop),
+            keyEquivalent: ""
+        )
+        alwaysOnTop.target = self
+        alwaysOnTopItem = alwaysOnTop
+        appMenu.addItem(alwaysOnTop)
+        appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Quit npm remote control",
             action: #selector(NSApplication.terminate(_:)),
@@ -254,11 +277,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func sizeWindowToContent() {
+        guard !userHasManuallyResized else { return }
         guard let win = window, let fh = fittingHeight else { return }
-        let h = min(max(fh(), 80), 600)
+        let contentH = min(max(fh(), 80), 600)
+        let contentW = win.contentView?.frame.width ?? 280
+        let frameH = win.frameRect(forContentRect: NSRect(x: 0, y: 0, width: contentW, height: contentH)).height
         var f = win.frame
-        f.origin.y += f.height - h // keep the top edge fixed
-        f.size.height = h
+        f.origin.y += f.height - frameH
+        f.size.height = frameH
         win.setFrame(f, display: true)
         win.invalidateShadow()
     }
@@ -268,5 +294,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSWindowDelegate {
     func windowDidMove(_ notification: Notification) { saveWindowPosition() }
-    func windowDidEndLiveResize(_ notification: Notification) { saveWindowPosition() }
+    func windowDidEndLiveResize(_ notification: Notification) {
+        userHasManuallyResized = true
+        saveWindowPosition()
+    }
 }

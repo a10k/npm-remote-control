@@ -44,8 +44,5 @@ final class FileWatcher {
         source = nil
     }
 
-    deinit {
-        source?.cancel()
-        source = nil
-    }
+    deinit { source?.cancel() }
 }

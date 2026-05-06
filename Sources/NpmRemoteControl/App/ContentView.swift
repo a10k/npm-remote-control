@@ -4,15 +4,7 @@ struct ContentView: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            HeaderView()
-            Divider()
-            mainContent
-            Divider()
-            footer
-        }
-        .frame(width: 280)
-        .glassEffect(in: .rect(cornerRadius: 12))
+        mainContent
     }
 
     @ViewBuilder
@@ -49,15 +41,5 @@ struct ContentView: View {
             .multilineTextAlignment(.center)
             .padding(20)
             .frame(maxWidth: .infinity)
-    }
-
-    private var footer: some View {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                        as? String ?? "0.1"
-        return Text("npm remote control · v\(version)")
-            .font(.system(size: 10))
-            .foregroundColor(.secondary)
-            .opacity(0.5)
-            .padding(.vertical, 7)
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ScriptRow: View {
@@ -5,25 +6,35 @@ struct ScriptRow: View {
     @EnvironmentObject var state: AppState
 
     private var scriptState: ScriptState { state.states[script.id] ?? .idle }
+    private var isExpanded: Bool { state.expanded.contains(script.id) }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
+                if case .running = scriptState {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.15), value: isExpanded)
+                        .frame(width: 12)
+                }
                 Text(script.id)
                     .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer()
-                stateIcon.frame(width: 20, height: 20)
+                trailingIcon
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
+            .onHover { hovering in hovering ? NSCursor.pointingHand.push() : NSCursor.pop() }
             .onTapGesture { handleTap() }
             .contextMenu { contextMenuItems }
 
-            if state.expanded.contains(script.id) {
+            if isExpanded {
                 TerminalPanel(scriptName: script.id)
             }
         }
@@ -34,12 +45,7 @@ struct ScriptRow: View {
         case .idle, .exited:
             state.run(script: script)
         case .running:
-            // Toggle the terminal panel while the script is running.
-            if state.expanded.contains(script.id) {
-                state.expanded.remove(script.id)
-            } else {
-                state.expanded.insert(script.id)
-            }
+            state.expanded.formSymmetricDifference([script.id])
         }
     }
 
@@ -60,18 +66,27 @@ struct ScriptRow: View {
     }
 
     @ViewBuilder
-    private var stateIcon: some View {
+    private var trailingIcon: some View {
         switch scriptState {
         case .idle:
             Image(systemName: "play.fill")
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
         case .running:
-            ProgressView().scaleEffect(0.7)
+            Button { state.stop(scriptNamed: script.id) } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help("Kill")
         case .exited(let code, _):
             Image(systemName: code == 0 ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .font(.system(size: 13))
-                .foregroundColor(code == 0 ? .green : .red)
+                .foregroundStyle(code == 0 ? Color.green : Color.red)
+                .frame(width: 20, height: 20)
         }
     }
 }

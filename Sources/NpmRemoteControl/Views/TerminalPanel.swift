@@ -6,24 +6,14 @@ struct TerminalPanel: View {
 
     private var output: String { state.outputs[scriptName]?.text ?? "" }
 
-    private var scriptState: ScriptState { state.states[scriptName] ?? .idle }
-
-    private var isRunning: Bool {
-        if case .running = scriptState { return true }
-        return false
-    }
-
     private var failCode: Int32? {
-        if case .exited(let code, _) = scriptState, code != 0 { return code }
-        return nil
+        guard case .exited(let code, _) = state.states[scriptName], code != 0 else { return nil }
+        return code
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .topTrailing) {
-                scrollPane
-                if isRunning { killButton }
-            }
+            scrollPane
             if let code = failCode { exitBadge(code) }
         }
     }
@@ -33,7 +23,7 @@ struct TerminalPanel: View {
             ScrollView(.vertical, showsIndicators: true) {
                 Text(output.isEmpty ? " " : output)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Color(white: 0.85))
+                    .foregroundStyle(Color(white: 0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                     .textSelection(.enabled)
@@ -47,26 +37,13 @@ struct TerminalPanel: View {
         .background(Color(white: 0.1))
     }
 
-    private var killButton: some View {
-        Button { state.stop(scriptNamed: scriptName) } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(.white.opacity(0.75))
-                .frame(width: 18, height: 18)
-                .background(Color.white.opacity(0.18))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .padding(6)
-    }
-
     private func exitBadge(_ code: Int32) -> some View {
         HStack(spacing: 5) {
             Image(systemName: "xmark.circle.fill")
             Text("exited with code \(code)")
         }
         .font(.system(size: 10, design: .monospaced))
-        .foregroundColor(.red)
+        .foregroundStyle(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

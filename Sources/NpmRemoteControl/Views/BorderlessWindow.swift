@@ -4,16 +4,13 @@ final class BorderlessWindow: NSWindow {
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 400),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        isOpaque = false
-        backgroundColor = .clear
         isMovableByWindowBackground = true
-        level = .floating
-        hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        minSize = NSSize(width: 240, height: 80)
     }
 
     override var canBecomeKey: Bool { true }
