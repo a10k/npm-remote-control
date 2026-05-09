@@ -43,3 +43,13 @@ make dmg     # → build/release/npm-remote-control.dmg
 ```
 
 Requires macOS 26 and Xcode 26.
+
+## Install directly to your npm folder
+
+```bash
+curl -L -o /tmp/nrc.dmg "https://github.com/a10k/npm-remote-control/releases/download/v0.3.0/npm-remote-control.dmg" \
+  && hdiutil attach /tmp/nrc.dmg -nobrowse -quiet \
+  && cp -R "/Volumes/npm remote control/npm-remote-control.app" . \
+  && hdiutil detach "/Volumes/npm remote control" -quiet \
+  && rm /tmp/nrc.dmg
+```

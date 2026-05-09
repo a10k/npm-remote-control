@@ -130,7 +130,7 @@ final class AppState: ObservableObject {
 // MARK: - App delegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: BorderlessWindow?
     let appState = AppState()
     private var cancellables = Set<AnyCancellable>()
@@ -140,7 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var alwaysOnTopItem: NSMenuItem?
     private static let alwaysOnTopKey = "alwaysOnTop"
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public override init() { super.init() }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
         appState.load()
 
@@ -187,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         let runner = appState.runner
         let done = DispatchSemaphore(value: 0)
         Task.detached {
@@ -197,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = done.wait(timeout: .now() + 2)
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     // MARK: - Window position persistence
 
@@ -293,8 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - NSWindowDelegate
 
 extension AppDelegate: NSWindowDelegate {
-    func windowDidMove(_ notification: Notification) { saveWindowPosition() }
-    func windowDidEndLiveResize(_ notification: Notification) {
+    public func windowDidMove(_ notification: Notification) { saveWindowPosition() }
+    public func windowDidEndLiveResize(_ notification: Notification) {
         userHasManuallyResized = true
         saveWindowPosition()
     }

@@ -1,4 +1,5 @@
 import AppKit
+import NpmRemoteControlLib
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
