@@ -6,12 +6,6 @@ Context for Claude Code when working in this repo.
 
 `npm-remote-control` is a tiny native macOS app (Swift + SwiftUI) that the user drops into any npm project folder. It reads `package.json`, shows one button per script, and runs them on click. Long-running scripts show an inline embedded terminal with a Kill button.
 
-Read these in order before starting any work:
-
-1. `README.md` — what we're building, why
-2. `PLAN.md` — milestone-by-milestone implementation plan, follow it top-down
-3. `ARCHITECTURE.md` — file layout, key types, design decisions
-
 ## Hard constraints
 
 - **macOS only.** Don't add Linux/Windows fallbacks.
@@ -22,10 +16,9 @@ Read these in order before starting any work:
 
 ## Working style
 
-- Commit after every milestone in `PLAN.md` with a clear message (e.g. `M1: package.json discovery`).
-- If you discover something that contradicts the plan, update the relevant MD file *first*, then change code.
 - Prefer 1 file with 200 lines over 5 files with 40 lines each, unless the boundary is genuinely meaningful.
 - No comments that just restate the code. Comments should explain *why*, not *what*.
+- Do not add `Co-Authored-By` or similar signatures to commit messages.
 
 ## Build & run
 
